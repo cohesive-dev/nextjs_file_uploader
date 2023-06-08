@@ -3,11 +3,13 @@ import { fileToText, parseTextToJSON } from "../../backend/pdf";
 import { FormidableError, parseForm } from "../../backend/utils/parse-form";
 import { head } from "lodash";
 import { ExtractedData } from "../../common/types/rpc";
-import { postExtractionResult } from "../../backend/clients/callback";
 
 const handler = async (
   req: NextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse<{
+    data: ExtractedData | null;
+    error: string | null;
+  }>
 ) => {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -22,19 +24,11 @@ const handler = async (
     const { fields, files } = await parseForm(req);
     const file = files.files;
     let filepath = Array.isArray(file) ? file.map((f) => f.filepath) : file.filepath;
-		const callbackUrl = Array.isArray(fields["callbackUrl"]) ? head(fields["callbackUrl"]) : fields["callbackUrl"];
-		const tsSchema = Array.isArray(fields["tsSchema"]) ? head(fields["tsSchema"]) : fields["tsSchema"];
-		fileToText({
-			filepath: Array.isArray(filepath) ? filepath[0] : filepath,
-			tsSchema: tsSchema ?? null,
-		})
-		.then(async (data: ExtractedData) => {
-			if (callbackUrl) {
-				await postExtractionResult(data, callbackUrl);
-			}
-		});
+		const field = Array.isArray(fields["tsSchema"]) ? head(fields["tsSchema"]) : fields["tsSchema"];
+		const data = await fileToText(Array.isArray(filepath) ? filepath[0] : filepath, field ?? null);
     res.status(200).json({
-      message: "File uploaded successfully. Please wait for the result."
+      data,
+      error: null,
     });
   } catch (e) {
     if (e instanceof FormidableError) {
