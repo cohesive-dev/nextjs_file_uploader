@@ -1,6 +1,5 @@
 import next from "next";
 import express from "express";
-import datadogTracer from "dd-trace";
 
 const dev = process.env.NODE_ENV !== 'production'
 const app = next({ dev })
