@@ -85,6 +85,8 @@ const SingleFileUploadForm = ({
         error: string | null;
       } = await res.json();
 
+			console.log("data", data);
+
       if (error || !data) {
         alert(error || "Sorry! something went wrong.");
         return;

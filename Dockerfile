@@ -1,40 +1,49 @@
-# dependencies image
-FROM node:14-alpine
+# Install dependencies only when needed
+FROM node:16-buster AS deps
+
 WORKDIR /app
-
-# Install Doppler CLI
-RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.key' -O /etc/apk/keys/cli@doppler-8004D9FF50437357.rsa.pub && \
-    echo 'https://packages.doppler.com/public/cli/alpine/any-version/main' | tee -a /etc/apk/repositories && \
-    apk add doppler
-
 COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile
 
-# build image
-FROM node:14-alpine
-WORKDIR /app
-COPY --from=0 /app/node_modules ./node_modules
-COPY . .
-RUN yarn build
-RUN rm -rf node_modules
-RUN yarn install --production --frozen-lockfile --ignore-scripts --prefer-offline
+# Rebuild the source code only when needed
+FROM node:16-buster AS builder
 
-# build output image
-FROM node:14-alpine
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+
+COPY . .
+
+RUN yarn build
+
+# Production image, copy all the files and run next
+FROM node:16-buster AS runner
+SHELL ["/bin/bash", "-c"]
+WORKDIR /app
+
+# # Install the Doppler CLI
+RUN apt-get update && apt-get install -y apt-transport-https ca-certificates curl gnupg && \
+    curl -sLf --retry 3 --tlsv1.2 --proto "=https" 'https://packages.doppler.com/public/cli/gpg.DE2A7741A397C129.key' | apt-key add - && \
+    echo "deb https://packages.doppler.com/public/cli/deb/debian any-version main" | tee /etc/apt/sources.list.d/doppler-cli.list && \
+    apt-get update && \
+    apt-get -y install doppler
 
 ENV NODE_ENV production
 
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nextjs -u 1001
-WORKDIR /app
-COPY --from=1 --chown=nextjs:nodejs /app/package.json /app/yarn.lock ./
-COPY --from=1 --chown=nextjs:nodejs /app/node_modules ./node_modules
-COPY --from=1 --chown=nextjs:nodejs /app/public ./public
-COPY --from=1 --chown=nextjs:nodejs /app/.next ./.next
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/server.ts ./server.ts
 
 USER nextjs
 
 EXPOSE 3000
 
+ENV PORT 3000
+
+# Fetch secrets and print them using "printenv" command
 ENTRYPOINT ["doppler", "run", "--"]
-CMD [ "yarn", "start" ]
+CMD ["yarn", "start"]

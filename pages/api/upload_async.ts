@@ -1,7 +1,9 @@
-import { head } from "lodash";
 import type { NextApiRequest, NextApiResponse } from "next";
-import { fileToText } from "../../backend/pdf";
+import { fileToText, parseTextToJSON } from "../../backend/pdf";
 import { FormidableError, parseForm } from "../../backend/utils/parse-form";
+import { head } from "lodash";
+import { ExtractedData } from "../../common/types/rpc";
+import { postExtractionResult } from "../../backend/clients/callback";
 
 const handler = async (
   req: NextApiRequest,
@@ -20,13 +22,19 @@ const handler = async (
     const { fields, files } = await parseForm(req);
     const file = files.files;
     let filepath = Array.isArray(file) ? file.map((f) => f.filepath) : file.filepath;
+		const callbackUrl = Array.isArray(fields["callbackUrl"]) ? head(fields["callbackUrl"]) : fields["callbackUrl"];
 		const tsSchema = Array.isArray(fields["tsSchema"]) ? head(fields["tsSchema"]) : fields["tsSchema"];
-		const data = await fileToText({
+		fileToText({
 			filepath: Array.isArray(filepath) ? filepath[0] : filepath,
 			tsSchema: tsSchema ?? null,
+		})
+		.then(async (data: ExtractedData) => {
+			if (callbackUrl) {
+				await postExtractionResult(data, callbackUrl);
+			}
 		});
     res.status(200).json({
-      data
+      message: "File uploaded successfully. Please wait for the result."
     });
   } catch (e) {
     if (e instanceof FormidableError) {
