@@ -33,6 +33,7 @@ const handler = async (
 				await postExtractionResult(data, callbackUrl);
 			}
 		});
+		console.log("Sending out response", Date.now());
     res.status(200).json({
       message: "File uploaded successfully. Please wait for the result."
     });
